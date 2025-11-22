@@ -1,11 +1,12 @@
 using UnityEngine;
 using System.Collections;
-using System.Collections.Generic; // Нужно для списков
+using System.Collections.Generic;
 using UnityEngine.InputSystem;
 
 public class GridManager : MonoBehaviour
 {
     [Header("Grid Settings")]
+    // Эти значения теперь будут задаваться через GameManager, но оставим дефолтные
     public int gridWidth = 8;
     public int gridHeight = 8;
     public float cellSize = 1f;
@@ -21,14 +22,13 @@ public class GridManager : MonoBehaviour
 
     [Header("Animation Settings")]
     public float swapDuration = 0.3f;
-    public float fallDuration = 0.1f; // Задержка для эффекта падения
+    public float fallDuration = 0.1f;
 
     private GameObject[,] grid;
     private int[,] planetGrid;
     private GameObject selectedCell = null;
     private Vector2Int selectedCoord;
     
-    // Флаг, чтобы нельзя было кликать, пока идет анимация уничтожения/падения
     private bool isProcessing = false; 
 
     public enum PlanetType
@@ -36,17 +36,38 @@ public class GridManager : MonoBehaviour
         Lava, Ice, Gas, Crystal, Desert, Ocean
     }
 
+    // --- ВАЖНОЕ ИЗМЕНЕНИЕ: Метод Start убран или пуст ---
+    // Мы больше не создаем сетку здесь, мы ждем команды от GameManager
     void Start()
     {
+        // Пусто. Ждем вызова InitializeLevel
+    }
+
+    // --- НОВЫЙ МЕТОД: Вызывается из GameManager ---
+    public void InitializeLevel(int width, int height)
+    {
+        // 1. Очищаем старое поле, если оно было
+        if (grid != null)
+        {
+            foreach (GameObject obj in grid)
+            {
+                if (obj != null) Destroy(obj);
+            }
+        }
+
+        // 2. Применяем новые размеры
+        gridWidth = width;
+        gridHeight = height;
+
+        // 3. Создаем всё заново
         CreateGrid();
         InitializePlanets();
-        // Убрали CreateTestPlanets, используем UpdateVisuals
-        UpdateAllVisuals(); 
+        UpdateAllVisuals();
     }
 
     void Update()
     {
-        if (!isProcessing) // Блокируем ввод во время анимаций
+        if (!isProcessing)
         {
             HandleInput();
         }
@@ -55,6 +76,8 @@ public class GridManager : MonoBehaviour
     void CreateGrid()
     {
         grid = new GameObject[gridWidth, gridHeight];
+        
+        // Вычисляем смещение, чтобы сетка была ровно по центру экрана
         Vector3 gridOffset = new Vector3(-gridWidth * cellSize / 2 + cellSize / 2, -gridHeight * cellSize / 2 + cellSize / 2, 0);
 
         for (int x = 0; x < gridWidth; x++)
@@ -142,7 +165,6 @@ public class GridManager : MonoBehaviour
         {
             Vector2Int firstCoord = selectedCoord;
             
-            // Если кликнули на ту же ячейку - снимаем выделение
             if (firstCoord == coord) {
                 DeselectCell();
                 return;
@@ -154,7 +176,6 @@ public class GridManager : MonoBehaviour
             }
             else 
             {
-                // Если кликнули далеко - просто переключаем выделение
                 DeselectCell();
                 SelectCell(coord);
             }
@@ -201,96 +222,84 @@ public class GridManager : MonoBehaviour
 
     IEnumerator SwapPlanets(Vector2Int coord1, Vector2Int coord2)
     {
-        isProcessing = true; // Блокируем ввод
-        DeselectCell();      // Снимаем выделение сразу
+        isProcessing = true; 
+        DeselectCell(); 
 
-        // 1. Логический обмен местами
+        // 1. Логический обмен
         int tempType = planetGrid[coord1.x, coord1.y];
         planetGrid[coord1.x, coord1.y] = planetGrid[coord2.x, coord2.y];
         planetGrid[coord2.x, coord2.y] = tempType;
         
-        // 2. Визуальное обновление (картинки меняются местами)
+        // 2. Визуальный обмен
         UpdatePlanetVisual(coord1.x, coord1.y);
         UpdatePlanetVisual(coord2.x, coord2.y);
         
-        // Ждем пока пройдет анимация свапа
         yield return new WaitForSeconds(swapDuration);
         
-        // 3. Проверяем совпадения
+        // 3. Проверка совпадений
         HashSet<Vector2Int> matches = FindAllMatches();
         
         if (matches.Count > 0)
         {
-            // === УСПЕХ: СОВПАДЕНИЕ ЕСТЬ ===
-            
-            // Списываем ход (только здесь!)
+            // УСПЕХ: Списываем ход
             if (GameManager.Instance != null)
             {
                 GameManager.Instance.DecreaseMove();
             }
 
-            // Запускаем процесс уничтожения, падения и начисления очков
             yield return StartCoroutine(ProcessMatches(matches));
         }
         else
         {
-            // === НЕУДАЧА: СОВПАДЕНИЙ НЕТ ===
-            // Ход НЕ списываем, просто возвращаем всё назад
-            
-            // Меняем обратно в массиве данных
+            // НЕУДАЧА: Возвращаем всё назад
             tempType = planetGrid[coord1.x, coord1.y];
             planetGrid[coord1.x, coord1.y] = planetGrid[coord2.x, coord2.y];
             planetGrid[coord2.x, coord2.y] = tempType;
             
-            // Возвращаем картинки обратно
             UpdatePlanetVisual(coord1.x, coord1.y);
             UpdatePlanetVisual(coord2.x, coord2.y);
             
-            isProcessing = false; // Разблокируем ввод, игрок может пробовать снова
+            isProcessing = false;
         }
     }
-    // Основной цикл: Удалить -> Упасть -> Заполнить -> Повторить поиск
+
     IEnumerator ProcessMatches(HashSet<Vector2Int> matches)
     {
         while (matches.Count > 0)
         {
-
-            // Начисляем очки за количество уничтоженных планет
-            // ВАЖНО: Добавь эту проверку и вызов
+            // Начисляем очки
             if (GameManager.Instance != null) 
             {
-                // Например, 10 очков за каждую планету
                 GameManager.Instance.AddScore(matches.Count * 10); 
             }
-            // 1. Уничтожаем совпадения
+
+            // 1. Уничтожаем
             foreach (var coord in matches)
             {
-                planetGrid[coord.x, coord.y] = -1; // -1 означает "пусто"
-                // Визуально скрываем (можно добавить партиклы здесь)
+                planetGrid[coord.x, coord.y] = -1; 
                 grid[coord.x, coord.y].GetComponent<SpriteRenderer>().sprite = null;
             }
             
             yield return new WaitForSeconds(0.2f);
 
-            // 2. Заставляем планеты падать вниз
+            // 2. Падение
             yield return StartCoroutine(CollapseGrid());
 
-            // 3. Заполняем пустоты сверху
+            // 3. Заполнение
             yield return StartCoroutine(RefillGrid());
 
-            // 4. Снова ищем совпадения (цепная реакция)
+            // 4. Повторный поиск
             matches = FindAllMatches();
         }
 
-        isProcessing = false; // Разблокируем ввод, когда всё успокоилось
+        isProcessing = false;
     }
 
-    // Поиск всех совпадений (горизонталь и вертикаль)
     HashSet<Vector2Int> FindAllMatches()
     {
         HashSet<Vector2Int> matchedCells = new HashSet<Vector2Int>();
 
-        // Горизонтальные
+        // Горизонталь
         for (int y = 0; y < gridHeight; y++)
         {
             for (int x = 0; x < gridWidth - 2; x++)
@@ -308,7 +317,7 @@ public class GridManager : MonoBehaviour
             }
         }
 
-        // Вертикальные
+        // Вертикаль
         for (int x = 0; x < gridWidth; x++)
         {
             for (int y = 0; y < gridHeight - 2; y++)
@@ -329,7 +338,6 @@ public class GridManager : MonoBehaviour
         return matchedCells;
     }
 
-    // Логика падения
     IEnumerator CollapseGrid()
     {
         for (int x = 0; x < gridWidth; x++)
@@ -344,24 +352,19 @@ public class GridManager : MonoBehaviour
                 }
                 else if (emptyCellsCount > 0)
                 {
-                    // Сдвигаем планету вниз на количество пустых клеток под ней
                     int newY = y - emptyCellsCount;
                     planetGrid[x, newY] = planetGrid[x, y];
                     planetGrid[x, y] = -1;
                     
-                    // Обновляем визуализацию
                     UpdatePlanetVisual(x, newY);
-                    // Очищаем старую ячейку
                     grid[x, y].GetComponent<SpriteRenderer>().sprite = null; 
                 }
             }
         }
         
-        // Небольшая пауза для визуального эффекта завершения падения
         yield return new WaitForSeconds(fallDuration);
     }
 
-    // Спавн новых планет
     IEnumerator RefillGrid()
     {
         for (int x = 0; x < gridWidth; x++)
@@ -379,8 +382,6 @@ public class GridManager : MonoBehaviour
         yield return new WaitForSeconds(fallDuration);
     }
 
-    // --- ВИЗУАЛИЗАЦИЯ ---
-
     void UpdateAllVisuals()
     {
         for (int x = 0; x < gridWidth; x++)
@@ -394,7 +395,6 @@ public class GridManager : MonoBehaviour
         SpriteRenderer sr = cell.GetComponent<SpriteRenderer>();
         int planetType = planetGrid[x, y];
 
-        // Если тип -1 (пусто), убираем спрайт
         if (planetType == -1)
         {
             sr.sprite = null;
@@ -404,11 +404,10 @@ public class GridManager : MonoBehaviour
         if (planetSprites != null && planetType < planetSprites.Length && planetSprites[planetType] != null)
         {
             sr.sprite = planetSprites[planetType];
-            sr.color = Color.white; // Сбрасываем цвет на белый, чтобы видеть спрайт
+            sr.color = Color.white;
         }
         else
         {
-            // Fallback: использование цветов, если нет спрайтов
             Color[] planetColors = new Color[]
             {
                 Color.red, Color.blue, Color.yellow, 
@@ -417,7 +416,7 @@ public class GridManager : MonoBehaviour
             
             if (planetType < planetColors.Length)
             {
-                sr.sprite = null; // Убираем спрайт, чтобы видеть цвет
+                sr.sprite = null;
                 sr.color = planetColors[planetType];
             }
         }
@@ -425,7 +424,6 @@ public class GridManager : MonoBehaviour
 
     void ResetCellColor(int x, int y, int planetType)
     {
-        // Этот метод теперь просто вызывает UpdatePlanetVisual для упрощения
         UpdatePlanetVisual(x, y);
     }
 }

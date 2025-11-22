@@ -1,52 +1,93 @@
 using UnityEngine;
-using UnityEngine.UI; // Или TMPro если используешь TextMeshPro
-using System;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
-    public static GameManager Instance; // Синглтон для удобного доступа
+    public static GameManager Instance;
 
-    [Header("Level Settings")]
-    public int movesLeft = 20;
-    public int score = 0;
-    public int targetScore = 1000;
+    [Header("Текущий Уровень")]
+    public LevelData currentLevel; // Сюда перетащи файл уровня (Level_1)
+
+    [Header("Game State")]
+    public int movesLeft;
+    public int score;
+    public int targetScore;
 
     [Header("UI")]
-    // Сюда перетащишь текстовые поля из Canvas
-    public Text movesText; 
+    public Text movesText;
     public Text scoreText;
     public GameObject winScreen;
     public GameObject loseScreen;
 
     private bool isGameOver = false;
+    private GridManager gridManager;
 
     void Awake()
     {
         Instance = this;
+        gridManager = FindObjectOfType<GridManager>();
     }
 
     void Start()
     {
-        UpdateUI();
-        winScreen.SetActive(false);
-        loseScreen.SetActive(false);
+        if (currentLevel != null)
+        {
+            StartLevel();
+        }
+        else
+        {
+            Debug.LogError("ОШИБКА: Не назначен файл уровня (Current Level) в инспекторе GameManager!");
+        }
     }
 
-    // Вызывается из GridManager, когда фишки уничтожаются
+    void StartLevel()
+    {
+        // 1. Загружаем данные
+        if (currentLevel != null)
+        {
+            movesLeft = currentLevel.movesCount;
+            targetScore = currentLevel.targetScore;
+        }
+        
+        score = 0;
+        isGameOver = false;
+
+        // БЕЗОПАСНОЕ СКРЫТИЕ ОКОН (проверяем, есть ли они вообще, чтобы не было ошибок)
+        if (winScreen != null) winScreen.SetActive(false);
+        if (loseScreen != null) loseScreen.SetActive(false);
+        
+        UpdateUI();
+
+        // 2. Создаем сетку
+        if (gridManager != null && currentLevel != null)
+        {
+            gridManager.InitializeLevel(currentLevel.width, currentLevel.height);
+        }
+        else
+        {
+            Debug.LogError("ОШИБКА: GridManager не найден или LevelData пустой!");
+        }
+    }
+
+    // ЭТОТ МЕТОД ДОЛЖЕН БЫТЬ ТОЛЬКО ОДИН РАЗ
+    void UpdateUI()
+    {
+        // БЕЗОПАСНОЕ ОБНОВЛЕНИЕ ТЕКСТА
+        if (movesText != null) movesText.text = "Moves: " + movesLeft;
+        if (scoreText != null) scoreText.text = "Score: " + score;
+    }
+
     public void AddScore(int amount)
     {
         if (isGameOver) return;
-
         score += amount;
         UpdateUI();
         CheckWinCondition();
     }
 
-    // Вызывается из GridManager после каждого SwapPlanets (если ход был результативным или просто потрачен)
     public void DecreaseMove()
     {
         if (isGameOver) return;
-
         movesLeft--;
         UpdateUI();
 
@@ -68,27 +109,15 @@ public class GameManager : MonoBehaviour
     {
         isGameOver = true;
         Debug.Log("YOU WIN!");
-        
-        // Расчет звезд
-        int stars = 1;
-        if (movesLeft >= 5) stars = 3;
-        else if (movesLeft >= 2) stars = 2;
-
-        Debug.Log($"Stars received: {stars}");
-        winScreen.SetActive(true);
-        // Тут можно сохранить прогресс
+        // Проверка на null, чтобы не вылетело, если экран не назначен
+        if (winScreen != null) winScreen.SetActive(true);
     }
 
     void GameOver()
     {
         isGameOver = true;
         Debug.Log("GAME OVER");
-        loseScreen.SetActive(true);
-    }
-
-    void UpdateUI()
-    {
-        if (movesText) movesText.text = "Moves: " + movesLeft;
-        if (scoreText) scoreText.text = "Score: " + score;
+        // Проверка на null
+        if (loseScreen != null) loseScreen.SetActive(true);
     }
 }
