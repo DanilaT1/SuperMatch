@@ -204,44 +204,64 @@ public class GridManager : MonoBehaviour
         isProcessing = true; // Блокируем ввод
         DeselectCell();      // Снимаем выделение сразу
 
-        // Логический обмен
+        // 1. Логический обмен местами
         int tempType = planetGrid[coord1.x, coord1.y];
         planetGrid[coord1.x, coord1.y] = planetGrid[coord2.x, coord2.y];
         planetGrid[coord2.x, coord2.y] = tempType;
         
-        // Визуальное обновление
+        // 2. Визуальное обновление (картинки меняются местами)
         UpdatePlanetVisual(coord1.x, coord1.y);
         UpdatePlanetVisual(coord2.x, coord2.y);
         
+        // Ждем пока пройдет анимация свапа
         yield return new WaitForSeconds(swapDuration);
         
-        // Проверяем совпадения
+        // 3. Проверяем совпадения
         HashSet<Vector2Int> matches = FindAllMatches();
         
         if (matches.Count > 0)
         {
-            // Если есть совпадения - запускаем цикл обработки поля
+            // === УСПЕХ: СОВПАДЕНИЕ ЕСТЬ ===
+            
+            // Списываем ход (только здесь!)
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.DecreaseMove();
+            }
+
+            // Запускаем процесс уничтожения, падения и начисления очков
             yield return StartCoroutine(ProcessMatches(matches));
         }
         else
         {
-            // Если нет совпадений - меняем обратно
+            // === НЕУДАЧА: СОВПАДЕНИЙ НЕТ ===
+            // Ход НЕ списываем, просто возвращаем всё назад
+            
+            // Меняем обратно в массиве данных
             tempType = planetGrid[coord1.x, coord1.y];
             planetGrid[coord1.x, coord1.y] = planetGrid[coord2.x, coord2.y];
             planetGrid[coord2.x, coord2.y] = tempType;
             
+            // Возвращаем картинки обратно
             UpdatePlanetVisual(coord1.x, coord1.y);
             UpdatePlanetVisual(coord2.x, coord2.y);
             
-            isProcessing = false; // Разблокируем ввод
+            isProcessing = false; // Разблокируем ввод, игрок может пробовать снова
         }
     }
-
     // Основной цикл: Удалить -> Упасть -> Заполнить -> Повторить поиск
     IEnumerator ProcessMatches(HashSet<Vector2Int> matches)
     {
         while (matches.Count > 0)
         {
+
+            // Начисляем очки за количество уничтоженных планет
+            // ВАЖНО: Добавь эту проверку и вызов
+            if (GameManager.Instance != null) 
+            {
+                // Например, 10 очков за каждую планету
+                GameManager.Instance.AddScore(matches.Count * 10); 
+            }
             // 1. Уничтожаем совпадения
             foreach (var coord in matches)
             {
