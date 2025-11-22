@@ -256,10 +256,17 @@ public class GridManager : MonoBehaviour
             planetGrid[coord1.x, coord1.y] = planetGrid[coord2.x, coord2.y];
             planetGrid[coord2.x, coord2.y] = tempType;
             
+            // Визуальное возвращение
             UpdatePlanetVisual(coord1.x, coord1.y);
             UpdatePlanetVisual(coord2.x, coord2.y);
             
             isProcessing = false;
+            
+            // НОВОЕ: Проверяем, не застряла ли игра после неудачного хода
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.CheckForStuckState(); 
+            }
         }
     }
 
@@ -290,6 +297,11 @@ public class GridManager : MonoBehaviour
 
             // 4. Повторный поиск
             matches = FindAllMatches();
+        }
+        // Проверяем, не застряла ли игра после того, как все матчи были обработаны.
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.CheckForStuckState();
         }
 
         isProcessing = false;
@@ -422,8 +434,179 @@ public class GridManager : MonoBehaviour
         }
     }
 
+
+    
+
+
+
+    // --- НОВЫЙ МЕТОД: ПРОВЕРКА НА БЕЗВЫХОДНЫЕ СИТУАЦИИ ---
+
+public bool CheckForPossibleMoves()
+{
+    // Проверяем все ячейки
+    for (int x = 0; x < gridWidth; x++)
+    {
+        for (int y = 0; y < gridHeight; y++)
+        {
+            // Получаем координаты текущей ячейки
+            Vector2Int coord1 = new Vector2Int(x, y);
+
+            // Проверяем четырех соседей (вправо и вверх достаточно, чтобы не дублировать проверки)
+            
+            // 1. Проверяем соседа справа (x + 1)
+            if (x < gridWidth - 1)
+            {
+                Vector2Int coord2 = new Vector2Int(x + 1, y);
+                if (IsSwapPossible(coord1, coord2))
+                {
+                    return true; // Найден возможный ход!
+                }
+            }
+
+            // 2. Проверяем соседа сверху (y + 1)
+            if (y < gridHeight - 1)
+            {
+                Vector2Int coord2 = new Vector2Int(x, y + 1);
+                if (IsSwapPossible(coord1, coord2))
+                {
+                    return true; // Найден возможный ход!
+                }
+            }
+        }
+    }
+    return false; // Ходов не найдено
+}
+
+// Вспомогательный метод: проверяет, создаст ли обмен совпадение
+private bool IsSwapPossible(Vector2Int coord1, Vector2Int coord2)
+{
+    // Виртуально меняем местами типы планет
+    int type1 = planetGrid[coord1.x, coord1.y];
+    int type2 = planetGrid[coord2.x, coord2.y];
+
+    planetGrid[coord1.x, coord1.y] = type2;
+    planetGrid[coord2.x, coord2.y] = type1;
+
+    // Проверяем, образуются ли совпадения после виртуального обмена
+    bool matchFound = FindMatchesAt(coord1).Count > 0 || FindMatchesAt(coord2).Count > 0;
+
+    // ОБЯЗАТЕЛЬНО возвращаем типы планет на место
+    planetGrid[coord1.x, coord1.y] = type1;
+    planetGrid[coord2.x, coord2.y] = type2;
+
+    return matchFound;
+}
+
+// Вспомогательный метод: ищет совпадения только вокруг одной ячейки (нам нужен новый, быстрый метод)
+    HashSet<Vector2Int> FindMatchesAt(Vector2Int coord)
+    {
+        HashSet<Vector2Int> matches = new HashSet<Vector2Int>();
+        int x = coord.x;
+        int y = coord.y;
+        int type = planetGrid[x, y];
+
+        // Горизонталь
+        List<Vector2Int> horizontalMatches = new List<Vector2Int>();
+        horizontalMatches.Add(coord);
+
+        // Влево
+        for (int i = x - 1; i >= 0 && planetGrid[i, y] == type; i--) horizontalMatches.Add(new Vector2Int(i, y));
+        // Вправо
+        for (int i = x + 1; i < gridWidth && planetGrid[i, y] == type; i++) horizontalMatches.Add(new Vector2Int(i, y));
+
+        if (horizontalMatches.Count >= 3)
+        {
+            foreach (var c in horizontalMatches) matches.Add(c);
+        }
+
+        // Вертикаль
+        List<Vector2Int> verticalMatches = new List<Vector2Int>();
+        verticalMatches.Add(coord);
+
+        // Вниз
+        for (int i = y - 1; i >= 0 && planetGrid[x, i] == type; i--) verticalMatches.Add(new Vector2Int(x, i));
+        // Вверх
+        for (int i = y + 1; i < gridHeight && planetGrid[x, i] == type; i++) verticalMatches.Add(new Vector2Int(x, i));
+
+        if (verticalMatches.Count >= 3)
+        {
+            foreach (var c in verticalMatches) matches.Add(c);
+        }
+
+        return matches;
+    }
+
+
     void ResetCellColor(int x, int y, int planetType)
     {
         UpdatePlanetVisual(x, y);
+    }
+
+
+    // --- НОВЫЙ МЕТОД: ПЕРЕМЕШИВАНИЕ ПОЛЯ ---
+
+    public IEnumerator ShuffleGrid()
+    {
+        Debug.Log("Поле перемешивается. Нет доступных ходов.");
+        
+        // 1. Очищаем визуал (для красоты)
+        foreach (GameObject cell in grid)
+        {
+            if (cell != null) cell.GetComponent<SpriteRenderer>().sprite = null;
+        }
+        yield return new WaitForSeconds(0.5f); // Пауза для эффекта
+
+        // 2. Цикл перемешивания, пока не найдется хотя бы один ход
+        int maxAttempts = 100; // Ограничение на всякий случай
+        int attempt = 0;
+
+        do
+        {
+            // Создаем временный список всех типов планет на поле
+            List<int> allPlanets = new List<int>();
+            for (int x = 0; x < gridWidth; x++)
+            {
+                for (int y = 0; y < gridHeight; y++)
+                {
+                    allPlanets.Add(planetGrid[x, y]);
+                }
+            }
+
+            // Перемешиваем список (алгоритм Фишера-Йетса)
+            for (int i = 0; i < allPlanets.Count; i++)
+            {
+                int temp = allPlanets[i];
+                int randomIndex = Random.Range(i, allPlanets.Count);
+                allPlanets[i] = allPlanets[randomIndex];
+                allPlanets[randomIndex] = temp;
+            }
+
+            // Заполняем поле перемешанными планетами
+            int index = 0;
+            for (int x = 0; x < gridWidth; x++)
+            {
+                for (int y = 0; y < gridHeight; y++)
+                {
+                    planetGrid[x, y] = allPlanets[index++];
+                }
+            }
+            
+            attempt++;
+            
+        } while (CheckForPossibleMoves() == false && attempt < maxAttempts);
+
+        // 3. Обновляем визуал, чтобы показать новое поле
+        UpdateAllVisuals();
+        yield return new WaitForSeconds(0.5f);
+        
+        // После перемешивания нужно проверить, не создало ли оно новых совпадений
+        HashSet<Vector2Int> matches = FindAllMatches();
+        if (matches.Count > 0)
+        {
+            Debug.Log("Перемешивание создало матчи, обрабатываем...");
+            yield return StartCoroutine(ProcessMatches(matches));
+        }
+
+        isProcessing = false; // Разрешаем ввод после всех операций
     }
 }

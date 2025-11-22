@@ -62,6 +62,9 @@ public class GameManager : MonoBehaviour
         if (gridManager != null && currentLevel != null)
         {
             gridManager.InitializeLevel(currentLevel.width, currentLevel.height);
+
+            // НОВОЕ: Проверяем начальное поле, чтобы оно не было тупиковым
+            CheckForStuckState();
         }
         else
         {
@@ -79,29 +82,70 @@ public class GameManager : MonoBehaviour
 
     public void AddScore(int amount)
     {
-        if (isGameOver) return;
         score += amount;
         UpdateUI();
+        // Проверяем победу сразу после начисления очков
         CheckWinCondition();
     }
 
+
+    // --- НОВЫЕ МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ СОСТОЯНИЕМ ИГРЫ ---
+
+    /// <summary>
+    /// Проверяет, достиг ли игрок целевого счета.
+    /// </summary>
+    public void CheckWinCondition()
+    {
+        // Проверяем победу только в случае, если игра еще не закончилась
+        if (!isGameOver && score >= targetScore)
+        {
+            GameWin();
+        }
+    }
+
+    /// <summary>
+    /// Обрабатывает состояние победы.
+    /// </summary>
+    public void GameWin()
+    {
+        isGameOver = true;
+        Debug.Log("ПОБЕДА! Вы достигли целевого счета.");
+        // if (winScreen != null) winScreen.SetActive(true); // Раскомментируйте, когда добавите UI-панель
+    }
+
+    /// <summary>
+    /// Обрабатывает состояние поражения (вызывается, когда ходы заканчиваются).
+    /// </summary>
+    public void GameOver()
+    {
+        isGameOver = true;
+        Debug.Log("ПОРАЖЕНИЕ! Ходы закончились, а цель не достигнута.");
+        // if (loseScreen != null) loseScreen.SetActive(true); // Раскомментируйте, когда добавите UI-панель
+    }
+
+    
     public void DecreaseMove()
     {
         if (isGameOver) return;
         movesLeft--;
         UpdateUI();
 
-        if (movesLeft <= 0 && score < targetScore)
+        // 1. Проверка на конец игры (если ходы закончились)
+        if (movesLeft <= 0)
         {
-            GameOver();
+            // Если ходы закончились, и мы не достигли цели (GameWin() не сработал ранее)
+            if (score < targetScore)
+            {
+                GameOver();
+            }
+            return;
         }
-    }
 
-    void CheckWinCondition()
-    {
-        if (score >= targetScore)
+        // 2. Проверка на "Безвыходные ситуации"
+        if (gridManager != null && !gridManager.CheckForPossibleMoves())
         {
-            WinGame();
+            // Запускаем корутину перемешивания
+            StartCoroutine(gridManager.ShuffleGrid());
         }
     }
 
@@ -113,11 +157,19 @@ public class GameManager : MonoBehaviour
         if (winScreen != null) winScreen.SetActive(true);
     }
 
-    void GameOver()
+
+    // --- НОВЫЙ МЕТОД: ПРОВЕРКА И ПЕРЕМЕШИВАНИЕ ---
+    public void CheckForStuckState()
     {
-        isGameOver = true;
-        Debug.Log("GAME OVER");
-        // Проверка на null
-        if (loseScreen != null) loseScreen.SetActive(true);
+        // Если игра закончилась, или GridManager не найден, выходим
+        if (isGameOver || gridManager == null) return; 
+        
+        // Если ходов нет, запускаем перемешивание
+        if (!gridManager.CheckForPossibleMoves())
+        {
+            Debug.Log("Нет возможных ходов! Запускается перемешивание.");
+            StartCoroutine(gridManager.ShuffleGrid());
+        }
     }
+    
 }
