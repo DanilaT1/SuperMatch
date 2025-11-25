@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 553fad7183c0beb4f8bde653ee5285ef, type: 3}
   m_Name: Level_2
   m_EditorClassIdentifier: Assembly-CSharp::LevelData
-  width: 8
-  height: 8
-  movesCount: 5
-  targetScore: 160
-  backgroundSprite: {fileID: 0}
+  width: 6
+  height: 6
+  movesCount: 7
+  targetScore: 150
+  backgroundSprite: {fileID: -3254779602812191047, guid: 9e04acb4495ab4748ba526b0f1759a63, type: 3}

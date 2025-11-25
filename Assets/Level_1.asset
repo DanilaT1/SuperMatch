@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Level_1
   m_EditorClassIdentifier: Assembly-CSharp::LevelData
   width: 5
-  height: 6
+  height: 5
   movesCount: 5
-  targetScore: 160
+  targetScore: 100
   backgroundSprite: {fileID: 0}

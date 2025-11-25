@@ -10,10 +10,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 553fad7183c0beb4f8bde653ee5285ef, type: 3}
-  m_Name: Level_test_shufflle
+  m_Name: Level_3
   m_EditorClassIdentifier: Assembly-CSharp::LevelData
-  width: 4
-  height: 3
-  movesCount: 8
-  targetScore: 250
+  width: 7
+  height: 7
+  movesCount: 3
+  targetScore: 200
   backgroundSprite: {fileID: 0}
